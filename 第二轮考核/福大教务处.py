@@ -7,7 +7,7 @@ headers_UA = {
     'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36 Edg/118.0.2088.69'
 }
 num=0
-page = 183
+page = 184
 l=[0]
 
 def scrape_page_get(url,params={},headers= {}):
@@ -56,7 +56,7 @@ def parse(html,atr,xpath1,xpath2=''):
         
         try:#给有序列表中的字典增加键值对
 
-            l[20*(page-183)+number][atr]=result
+            l[20*(184-page)+number][atr]=result
         
         except:#新建字典，序号加一，且创建键值对
             num+=1
@@ -85,7 +85,7 @@ for i in range(1,5):
     url_page=f'{url2}{page}.htm'
     
     r = scrape_page_get(url_page,headers=headers_UA)
-    page+=1
+    page-=1
     parse(r,'时间',xpath['time_xpath'],xpath['time_xpath2'])
     parse(r,'标题',xpath['header'])
     parse(r,'链接',xpath['url'])
@@ -121,11 +121,35 @@ def parse2(html,atr,xpath):#爬取附件相关
 for i in range(1,101):
     r = scrape_page_get(l[i]['链接'],headers=headers_UA)
     parse2(r,'附件名',xpath['append_name'])
-    parse2(r,'附件下载次数',xpath['append_time'])
+    #parse2(r,'附件下载次数',xpath['append_time'])
     parse2(r,'附件链接',xpath['append_url'])
-    time.sleep(0.03)
+    time.sleep(0.02)
 
-#print(l)
+
+from selenium import webdriver
+import time
+options = webdriver.EdgeOptions()
+options.add_argument('--headless') 
+driver = webdriver.Edge(options=options)
+
+for i in range(1,101):
+    if l[i].get('附件名'):
+        driver.get(l[i]['链接'])
+        time.sleep(0.8)
+        entries = driver.execute_script("return window.performance.getEntries();")
+        for entry in entries:
+            if entry['entryType'] == 'resource' and entry['initiatorType'] == 'xmlhttprequest':
+                #print('Non-HTML Request URL:', entry['name'])
+                xhrurl = entry['name']
+                rp = requests.get(xhrurl,headers=headers_UA)
+                jsrp = rp.json()
+                result = jsrp["wbshowtimes"]
+                l[i]['下载次数']=result
+                break
+driver.quit()
+
+
+print(l)
 
 db = pymysql.connect(host='localhost',user = 'root',password='996931',port=3306,db='fzujwc')
 cursor = db.cursor()
@@ -134,9 +158,9 @@ for i in l[1:]:
 
     if i.get('附件名'):
         sql = """INSERT INTO 教务处通知
-            (序号,时间,标题,链接,通知人,附件名,附件链接)
+            (序号,时间,标题,链接,通知人,附件名,附件链接,下载次数)
             VALUES
-            (%d, '%s', '%s', '%s', '%s', '%s', '%s')"""%(i['序号'],i['时间'],i['标题'],i['链接'],i['通知人'],i['附件名'],i['附件链接'])
+            (%d, '%s', '%s', '%s', '%s', '%s', '%s', '%s')"""%(i['序号'],i['时间'],i['标题'],i['链接'],i['通知人'],i['附件名'],i['附件链接'],i['下载次数'])
     else:
         sql = """INSERT INTO 教务处通知
             (序号,时间,标题,链接,通知人)
